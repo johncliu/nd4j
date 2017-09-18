@@ -1,6 +1,7 @@
 package org.nd4j.autodiff.execution;
 
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.junit.Before;
 import org.junit.Test;
 import org.nd4j.autodiff.execution.conf.ExecutorConfiguration;
@@ -8,7 +9,10 @@ import org.nd4j.autodiff.execution.conf.OutputMode;
 import org.nd4j.autodiff.samediff.SameDiff;
 import org.nd4j.autodiff.samediff.impl.SDVariable;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.ops.Op;
 import org.nd4j.linalg.factory.Nd4j;
+
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -92,5 +96,32 @@ public class GraphExecutionerTest {
         //INDArray resA = executionerA.executeGraph(sameDiff)[0];
 
         //assertEquals(resA, resB);
+    }
+
+
+    @Test
+    public void testSums1() throws Exception {
+        SameDiff sameDiff = SameDiff.create();
+        INDArray ones = Nd4j.ones(4);
+        SDVariable sdVariable = sameDiff.var("ones",ones);
+        SDVariable result = sdVariable.addi(1.0);
+        SDVariable total = sameDiff.sum(result,Integer.MAX_VALUE);
+        List<Op> ops = sameDiff.exec().getRight();
+
+        val executioner = new NativeGraphExecutioner();
+
+        INDArray[] res = executioner.executeGraph(sameDiff);
+        assertEquals(8.0, res[0].getDouble(0), 1e-5);
+        /*
+        INDArray output = null;
+        for(int i = 0; i < 5; i++) {
+            output = sameDiff.execAndEndResult(ops);
+            System.out.println("Ones " + ones);
+            System.out.println(output);
+        }
+
+        assertEquals(Nd4j.valueArrayOf(4,7),ones);
+        assertEquals(28,output.getDouble(0),1e-1);
+        */
     }
 }

@@ -5,7 +5,9 @@ import com.google.flatbuffers.FlatBufferBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Pointer;
+import org.nd4j.autodiff.execution.conf.ExecutionMode;
 import org.nd4j.autodiff.execution.conf.ExecutorConfiguration;
+import org.nd4j.autodiff.execution.conf.OutputMode;
 import org.nd4j.autodiff.graph.api.Vertex;
 import org.nd4j.autodiff.opstate.NDArrayInformation;
 import org.nd4j.autodiff.opstate.OpExecAction;
@@ -16,6 +18,7 @@ import org.nd4j.autodiff.samediff.impl.SDVariable;
 import org.nd4j.graph.*;
 import org.nd4j.linalg.api.memory.pointers.PagedPointer;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.ops.executioner.OpExecutioner;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.primitives.Pair;
 import org.nd4j.linalg.primitives.Triple;
@@ -56,7 +59,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
      */
     @Override
     public INDArray[] executeGraph(SameDiff sd) {
-        return executeGraph(sd, new ExecutorConfiguration());
+        return executeGraph(sd, ExecutorConfiguration.builder().outputMode(OutputMode.IMPLICIT).executionMode(ExecutionMode.SEQUENTIAL).profilingMode(OpExecutioner.ProfilingMode.DISABLED).build());
     }
 
     /**
@@ -67,6 +70,8 @@ public class NativeGraphExecutioner implements GraphExecutioner {
      */
     @Override
     public INDArray[] executeGraph(SameDiff sd, ExecutorConfiguration configuration) {
+        log.info("Configuration: {}", configuration);
+
         FlatBufferBuilder bufferBuilder = new FlatBufferBuilder(32);
 
         SDGraph graph =  sd.getGraph();
@@ -181,6 +186,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
                     extraz,
                     dimensions,
                     -1,
+                    0,
                     node.getOpExecAction().getOpState().getOpType() == OpState.OpType.SCALAR_TRANSFORM ? node.getOpExecAction().getOpState().getScalarValue().floatValue() : 0.0f);
 
             nodes.add(flatNode);
