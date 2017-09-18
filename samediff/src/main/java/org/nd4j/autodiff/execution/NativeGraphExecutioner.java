@@ -164,6 +164,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
             int nodesIn = FlatNode.createInputVector(bufferBuilder, Ints.toArray(node.getInput()));
             int nodesOut = FlatNode.createOutputVector(bufferBuilder, Ints.toArray(node.getOutput()));
             int extraz = FlatNode.createExtraParamsVector(bufferBuilder, extras);
+            int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpExecAction().getOpState().getOpType() == OpState.OpType.CUSTOM ? node.getOpExecAction().getOpState().getExtraBits() : new int[]{});
             int dimensions = FlatNode.createDimensionsVector(bufferBuilder, node.getOpExecAction().getOpState().getAxes() != null ? node.getOpExecAction().getOpState().getAxes() : new int[]{});
             int fname = bufferBuilder.createString(node.getName());
 
@@ -176,9 +177,9 @@ public class NativeGraphExecutioner implements GraphExecutioner {
                     (byte) 0,
                     nodesOut,
                     extraz,
+                    integerArgs,
                     dimensions,
                     -1,
-                    0,
                     node.getOpExecAction().getOpState().getOpType() == OpState.OpType.SCALAR_TRANSFORM ? node.getOpExecAction().getOpState().getScalarValue().floatValue() : 0.0f);
 
             nodes.add(flatNode);

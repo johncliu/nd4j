@@ -33,7 +33,7 @@ public class OpState implements Serializable {
     private String id;
     private int[] axes;
     private Object[] extraArgs;
-    private Integer[] extraBits;
+    private int[] extraBits;
     private Object[] extraArgsWithoutInPlace;
     private NDArrayInformation result;
     //function handle mainly used for autodiff invocation
