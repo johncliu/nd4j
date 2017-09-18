@@ -3,6 +3,7 @@ package org.nd4j.autodiff.execution;
 import com.google.common.primitives.Ints;
 import com.google.flatbuffers.FlatBufferBuilder;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Pointer;
 import org.nd4j.autodiff.execution.conf.ExecutionMode;
@@ -62,14 +63,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
         return executeGraph(sd, ExecutorConfiguration.builder().outputMode(OutputMode.IMPLICIT).executionMode(ExecutionMode.SEQUENTIAL).profilingMode(OpExecutioner.ProfilingMode.DISABLED).build());
     }
 
-    /**
-     * This method executes given graph and returns results
-     *
-     * @param sd
-     * @return
-     */
-    @Override
-    public INDArray[] executeGraph(SameDiff sd, ExecutorConfiguration configuration) {
+    public ByteBuffer convertToFlatBuffers(SameDiff sd, ExecutorConfiguration configuration, Map<Integer, Node> intermediate) {
         log.info("Configuration: {}", configuration);
 
         FlatBufferBuilder bufferBuilder = new FlatBufferBuilder(32);
@@ -82,8 +76,6 @@ public class NativeGraphExecutioner implements GraphExecutioner {
         int varId = 0;
         Map<String, Integer> mappedVariables = new HashMap<>();
         Map<Integer, Integer> mappedInputs = new HashMap<>();
-
-        Map<Integer, Node> intermediate = new HashMap<>();
 
         // mapping input variables first
         for (NDArrayInformation input: graph.getInputs()) {
@@ -204,7 +196,27 @@ public class NativeGraphExecutioner implements GraphExecutioner {
         int fg = FlatGraph.createFlatGraph(bufferBuilder, 119, variablesOffset, nodesOffset, outputsOffset, configuration.getFlatConfiguration(bufferBuilder));
         bufferBuilder.finish(fg);
 
-        ByteBuffer buffer = bufferBuilder.dataBuffer();
+        return bufferBuilder.dataBuffer();
+    }
+
+    @Override
+    public ByteBuffer convertToFlatBuffers(SameDiff sd, ExecutorConfiguration configuration) {
+        return convertToFlatBuffers(sd, configuration, new HashMap<>());
+    }
+
+    /**
+     * This method executes given graph and returns results
+     *
+     * @param sd
+     * @return
+     */
+    @Override
+    public INDArray[] executeGraph(SameDiff sd, ExecutorConfiguration configuration) {
+
+        Map<Integer, Node> intermediate = new HashMap<>();
+
+        ByteBuffer buffer = convertToFlatBuffers(sd, configuration, intermediate);
+
         BytePointer bPtr = new BytePointer(buffer);
 
         log.info("Buffer length: {}", buffer.limit());
@@ -219,6 +231,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
         log.info("VarMap: {}", sd.getVariableMap());
 
         INDArray[] results = new INDArray[fr.variablesLength()];
+
         for (int e = 0; e < fr.variablesLength(); e++) {
             FlatVariable var = fr.variables(e);
             log.info("Var received: id: {}; name: {}", var.id(), var.name());
@@ -249,12 +262,12 @@ public class NativeGraphExecutioner implements GraphExecutioner {
             } else {
                 int original = intermediate.get(var.id()).getOriginalOutput();
                 //log.info("Original id: {}; out: {}; out2: {}", original, sd.getVertexIdxToInfo().get(original), graph.getInformationFor(original));
-                if (sd.getVariableMap().get(graph.getInformationFor(original).getId()) != null) {
-                    sd.getVariableMap().get(graph.getInformationFor(original).getId()).setArr(val);
+                if (sd.getVariableMap().get(sd.getGraph().getInformationFor(original).getId()) != null) {
+                    sd.getVariableMap().get(sd.getGraph().getInformationFor(original).getId()).setArr(val);
                 } else {
                     SDVariable variable = SDVariable.builder()
                             .arr(val)
-                            .varName(graph.getInformationFor(original).getId())
+                            .varName(sd.getGraph().getInformationFor(original).getId())
                             .shape(val.shape())
                             .sameDiff(sd)
                             .build();
@@ -263,6 +276,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
                 }
             }
         }
+
 
         return results;
     }
