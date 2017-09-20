@@ -11,6 +11,7 @@ import org.nd4j.autodiff.opstate.OpState;
 import org.nd4j.autodiff.samediff.SDGraph;
 import org.nd4j.autodiff.samediff.SameDiff;
 import org.nd4j.autodiff.samediff.impl.SDVariable;
+import org.nd4j.imports.intermediate.TGraph;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.io.ClassPathResource;
@@ -123,4 +124,9 @@ public class TensorFlowImportTest {
         assertEquals(6.0, res.meanNumber().doubleValue(), 1e-5);
     }
 
+
+    @Test
+    public void testIntermediate1() throws Exception {
+        val tg = TensorFlowImport.importIntermediate(new ClassPathResource("tf_graphs/tensorflow_inception_graph.pb").getFile());
+    }
 }

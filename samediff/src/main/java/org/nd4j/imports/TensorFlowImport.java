@@ -3,6 +3,7 @@ package org.nd4j.imports;
 import com.google.common.primitives.Ints;
 import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.nd4j.autodiff.graph.api.Edge;
 import org.nd4j.autodiff.graph.api.Vertex;
 import org.nd4j.autodiff.opstate.NDArrayInformation;
@@ -11,6 +12,9 @@ import org.nd4j.autodiff.opstate.OpState;
 import org.nd4j.autodiff.samediff.SDGraph;
 import org.nd4j.autodiff.samediff.SameDiff;
 import org.nd4j.autodiff.samediff.impl.SDVariable;
+import org.nd4j.imports.intermediate.TGraph;
+import org.nd4j.imports.intermediate.TNode;
+import org.nd4j.imports.intermediate.TVariable;
 import org.nd4j.linalg.api.buffer.DataBuffer;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.api.shape.Shape;
@@ -100,6 +104,7 @@ public class TensorFlowImport {
             if (isConst || isVar || isPlaceholder) {
                 List<Integer> dimensions = new ArrayList<>();
                 SDVariable variable = SDVariable.builder()
+                        .sameDiff(diff)
                         .varName(tfNode.getName())
                         .build();
 
@@ -183,11 +188,182 @@ public class TensorFlowImport {
                 }
             }
         }
-
-
-
         return diff;
     }
+
+    /**
+     * This method returns intermediate representation from TF protobuf file
+     *
+     * @param graphFile
+     * @return
+     */
+    public static TGraph importIntermediate(File graphFile) {
+        GraphDef def = null;
+        try (FileInputStream fis = new FileInputStream(graphFile); BufferedInputStream bis = new BufferedInputStream(fis)) {
+            def = GraphDef.parseFrom(bis);
+        } catch (Exception e) {
+            try (FileInputStream fis2 = new FileInputStream(graphFile); BufferedInputStream bis2 = new BufferedInputStream(fis2); BufferedReader reader = new BufferedReader(new InputStreamReader(bis2))) {
+                GraphDef.Builder builder = GraphDef.newBuilder();
+
+                StringBuilder str = new StringBuilder();
+                String line = null;
+                while ((line = reader.readLine()) != null) {
+                    str.append(line);//.append("\n");
+                }
+
+                TextFormat.getParser().merge(str.toString(), builder);
+                def = builder.build();
+            } catch (Exception e2) {
+                //
+            }
+        }
+
+        if (def == null)
+            throw new ND4JIllegalStateException("Unknown format");
+
+
+        return importIntermediate(def);
+    }
+
+    /**
+     * This method returns intermediate representation from TF GraphDef instance
+     *
+     * @param graphDef
+     * @return
+     */
+    public static TGraph importIntermediate(GraphDef tfGraph) {
+        TGraph intermediateGraph = new TGraph();
+
+        Map<String, Integer> reverseVertexMap = new HashMap<>();
+
+        int nodesCnt = 0;
+        for (NodeDef tfNode :tfGraph.getNodeList()) {
+            nodesCnt++;
+            log.info("Node name: {}; Op: {};", tfNode.getName(), tfNode.getOp());
+
+
+            boolean isConst = tfNode.getOp().equalsIgnoreCase("const");
+            boolean isVar = tfNode.getOp().startsWith("VariableV");
+            boolean isPlaceholder = tfNode.getOp().startsWith("Placeholder");
+
+            Map<String, AttrValue> attributes = tfNode.getAttrMap();
+
+
+
+            if (isConst || isVar || isPlaceholder) {
+                val variable = new TVariable();
+                List<Integer> dimensions = new ArrayList<>();
+
+                reverseVertexMap.put(tfNode.getName(), nodesCnt);
+
+                variable.setName(tfNode.getName());
+                variable.setId(nodesCnt);
+                variable.setPlaceholder(isPlaceholder);
+
+                int[] arrayShape = null;
+
+                if (attributes.containsKey("dtype")) {
+                    AttrValue dtype = attributes.get("dtype");
+
+                    dtype.getList();
+                }
+
+                if (attributes.containsKey("shape")) {
+                    AttrValue shape = attributes.get("shape");
+                    int dims = shape.getShape().getDimCount();
+                    if (dims > 0) {
+
+                        // even vector is 2d in nd4j
+                        if (dims == 1)
+                            dimensions.add(1);
+
+                        for (int e = 0; e < dims; e++) {
+                            // TODO: eventually we want long shapes :(
+                            dimensions.add((int) shape.getShape().getDim(e).getSize());
+                        }
+                    }
+
+                    arrayShape = Ints.toArray(dimensions);
+
+                    variable.setShape(arrayShape);
+                }
+
+                if (attributes.containsKey("value")) {
+                    // value of?
+                    AttrValue value = attributes.get("value");
+
+                    //DataType type = value.
+
+                    TensorProto tensor = value.getTensor();
+                    log.info("Dtype: {}", tensor.getDtype());
+
+                    INDArray array = getNDArrayFromTensor(tensor);
+                    variable.setShape(array.shape());
+                    variable.setArray(array);
+                }
+
+                //diff.addVariable(variable);
+                //graph.addVertex(vertex);
+
+                intermediateGraph.getVariableSpace().addVariable(variable.getId(), variable);
+            } else {
+                log.info("Adding op [{}]", tfNode.getOp());
+                // operation node
+
+                //NDArrayVertex vertex = new NDArrayVertex(diff,++nodesCnt, 0,varInformation);
+                //graph.addVertex(vertex);
+
+//                OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount());
+//                opState.setResult(varInformation);
+
+                reverseVertexMap.put(tfNode.getName(), nodesCnt);
+                val tNode = TNode.builder()
+                        .name(tfNode.getName())
+                        .id(nodesCnt)
+                        .opName(tfNode.getOp())
+                        .build();
+
+                for (int e = 0; e < tfNode.getInputCount(); e++) {
+                    String input = tfNode.getInput(e);
+
+
+                    // input taken from mult
+                    if (input.startsWith("^")) {
+
+                    } else if (input.contains(":")) {
+                        val split = input.split(":");
+
+                        if (split.length == 1) {
+                            Integer id = reverseVertexMap.get(split[0]);
+
+                            tNode.addInput(id);
+                        } else if (split.length == 2) {
+                            Integer node = reverseVertexMap.get(split[0]);
+                            Integer idx = Integer.valueOf(split[1]);
+
+                            tNode.addInput(node, idx);
+                        } else
+                            throw new RuntimeException("Unknown input passed in: [" + input + "]");
+
+
+                    } else {
+                        Integer id = reverseVertexMap.get(input);
+                        tNode.addInput(id);
+
+                        if (id == null)
+                            throw new ND4JIllegalStateException("Unknown input: [" + input + "]");
+
+                    }
+                    //graph.addEdge(id, nodesCnt, opState, true);
+                }
+
+                intermediateGraph.addNode(tNode);
+            }
+        }
+
+        return intermediateGraph;
+    }
+
 
     protected static INDArray getNDArrayFromTensor(TensorProto tfTensor) {
         int[] arrayShape = null;
@@ -230,7 +406,8 @@ public class TensorFlowImport {
                 return array;
             } else {
                 // FIXME: INT bytebuffers should be converted to floating point
-                throw new UnsupportedOperationException("To be implemented yet");
+//                throw new UnsupportedOperationException("To be implemented yet");
+                return Nd4j.create(5,5);
             }
         } else if (tfTensor.getDtype() == DataType.DT_FLOAT) {
             if (tfTensor.getFloatValCount() == 1) {
