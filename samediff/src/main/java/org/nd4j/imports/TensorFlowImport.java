@@ -236,9 +236,10 @@ public class TensorFlowImport {
 
         Map<String, Integer> reverseVertexMap = new HashMap<>();
 
+        int varsCnt = 0;
         int nodesCnt = 0;
         for (NodeDef tfNode :tfGraph.getNodeList()) {
-            nodesCnt++;
+
             log.info("Node name: {}; Op: {};", tfNode.getName(), tfNode.getOp());
 
 
@@ -251,13 +252,14 @@ public class TensorFlowImport {
 
 
             if (isConst || isVar || isPlaceholder) {
+                varsCnt--;
                 val variable = new TVariable();
                 List<Integer> dimensions = new ArrayList<>();
 
-                reverseVertexMap.put(tfNode.getName(), nodesCnt);
+                reverseVertexMap.put(tfNode.getName(), varsCnt);
 
                 variable.setName(tfNode.getName());
-                variable.setId(nodesCnt);
+                variable.setId(varsCnt);
                 variable.setPlaceholder(isPlaceholder);
 
                 int[] arrayShape = null;
@@ -305,8 +307,14 @@ public class TensorFlowImport {
                 //diff.addVariable(variable);
                 //graph.addVertex(vertex);
 
+                if (!variable.isPlaceholder())
+                    log.info("Variable shape: {}", Arrays.toString(variable.getArray().shape()));
+                else
+                    log.info("Placeholder shape: {}", Arrays.toString(variable.getShape()));
+
                 intermediateGraph.getVariableSpace().addVariable(variable.getId(), variable);
             } else {
+                nodesCnt++;
                 log.info("Adding op [{}]", tfNode.getOp());
                 // operation node
 
@@ -357,8 +365,11 @@ public class TensorFlowImport {
                     //graph.addEdge(id, nodesCnt, opState, true);
                 }
 
+                log.info("Node: {}", tNode);
                 intermediateGraph.addNode(tNode);
             }
+
+            System.out.println();
         }
 
         return intermediateGraph;

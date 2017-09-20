@@ -127,6 +127,10 @@ public class TensorFlowImportTest {
 
     @Test
     public void testIntermediate1() throws Exception {
+        Nd4j.create(1);
         val tg = TensorFlowImport.importIntermediate(new ClassPathResource("tf_graphs/tensorflow_inception_graph.pb").getFile());
+
+        assertTrue(tg.getVariableSpace().hasVariable("input"));
+        assertTrue(tg.getVariableSpace().getVariable("input").isPlaceholder());
     }
 }

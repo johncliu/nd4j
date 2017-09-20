@@ -5,6 +5,7 @@ import lombok.val;
 import org.nd4j.linalg.primitives.ImmutablePair;
 import org.nd4j.linalg.primitives.Pair;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,10 +16,11 @@ import java.util.Map;
  * @author raver119@gmail.com
  */
 public class TVariableSpace {
-    protected Map<TIndex, TVariable> numericMap = new HashMap<>();
-    protected Map<String, TVariable> symbolicMap = new HashMap<>();
+    private Map<TIndex, TVariable> numericMap = new HashMap<>();
+    private Map<String, TVariable> symbolicMap = new HashMap<>();
 
-    protected List<TVariable> placeholders;
+    private List<TVariable> externals = new ArrayList<>();
+    private List<TVariable> placeholders = new ArrayList<>();
 
 
     public void addVariable(int id, @NonNull TVariable variable) {
@@ -30,6 +32,9 @@ public class TVariableSpace {
 
         if (variable.isPlaceholder())
             placeholders.add(variable);
+
+        if (id < 0)
+            externals.add(variable);
     }
 
     public void addVariable(@NonNull String id, @NonNull TVariable variable) {
@@ -66,5 +71,14 @@ public class TVariableSpace {
         numericMap.clear();
         symbolicMap.clear();;
         placeholders.clear();
+    }
+
+
+    public boolean hasUndefinedPlaceholders() {
+        for (val variable: placeholders)
+            if (variable.getArray() == null)
+                return true;
+
+        return false;
     }
 }

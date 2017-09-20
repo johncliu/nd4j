@@ -33,4 +33,9 @@ public class TIndex {
     public int getIndex() {
         return pair.getSecond();
     }
+
+    @Override
+    public String toString() {
+        return "TIndex{" + pair.getFirst() + ":" + pair.getSecond() + '}';
+    }
 }

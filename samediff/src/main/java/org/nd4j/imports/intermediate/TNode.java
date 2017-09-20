@@ -53,4 +53,14 @@ public class TNode {
     public void addInput(int input, int index) {
         inputs.add(TIndex.makeOf(input, index));
     }
+
+    @Override
+    public String toString() {
+        return "TNode{" +
+                "inputs=" + inputs +
+                ", name='" + name + '\'' +
+                ", id=" + id +
+                ", opName='" + opName + '\'' +
+                '}';
+    }
 }
