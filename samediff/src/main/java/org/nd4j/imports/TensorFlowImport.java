@@ -12,10 +12,7 @@ import org.nd4j.autodiff.opstate.OpState;
 import org.nd4j.autodiff.samediff.SDGraph;
 import org.nd4j.autodiff.samediff.SameDiff;
 import org.nd4j.autodiff.samediff.impl.SDVariable;
-import org.nd4j.imports.intermediate.TGraph;
-import org.nd4j.imports.intermediate.TNode;
-import org.nd4j.imports.intermediate.TVariable;
-import org.nd4j.imports.intermediate.TVariableSpace;
+import org.nd4j.imports.intermediate.*;
 import org.nd4j.linalg.api.buffer.DataBuffer;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.api.shape.Shape;
@@ -266,6 +263,10 @@ public class TensorFlowImport {
 
                 int[] arrayShape = null;
 
+                if (tfNode.getName().equalsIgnoreCase("mixed4b/concat_dim")) {
+                    log.info("concat found!");
+                }
+
                 if (attributes.containsKey("dtype")) {
                     AttrValue dtype = attributes.get("dtype");
 
@@ -349,7 +350,7 @@ public class TensorFlowImport {
 
                     // input taken from mult
                     if (input.startsWith("^")) {
-
+                        log.info("Wow");
                     } else if (input.contains(":")) {
                         val split = input.split(":");
 
@@ -365,16 +366,13 @@ public class TensorFlowImport {
                         } else
                             throw new RuntimeException("Unknown input passed in: [" + input + "]");
 
-
                     } else {
                         Integer id = reverseVertexMap.get(input);
                         tNode.addInput(id);
 
                         if (id == null)
                             throw new ND4JIllegalStateException("Unknown input: [" + input + "]");
-
                     }
-                    //graph.addEdge(id, nodesCnt, opState, true);
                 }
 
                 OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount(), tNode, intermediateGraph.getVariableSpace());
@@ -396,8 +394,8 @@ public class TensorFlowImport {
         if (tfTensor.getIntValCount() == 1) {
             int val = tfTensor.getIntVal(0);
 
-            if (arrayShape == null || arrayShape.length == 0)
-                arrayShape = new int[]{1, 1};
+            arrayShape = new int[]{val};
+
         } else if (tfTensor.getInt64ValCount() > 0) {
             arrayShape = new int[tfTensor.getInt64ValCount()];
             for (int e = 0; e < tfTensor.getInt64ValCount(); e++)
@@ -491,8 +489,15 @@ public class TensorFlowImport {
 
                 long length = ArrayUtil.prodLong(arrayShape);
                 // binary representation
-                DataBuffer buffer = Nd4j.createBuffer(tfTensor.getTensorContent().asReadOnlyByteBuffer(), DataBuffer.Type.FLOAT, (int) length);
-                INDArray array = Nd4j.createArrayFromShapeBuffer(buffer, Nd4j.getShapeInfoProvider().createShapeInformation(arrayShape, 'c'));
+                val bb = tfTensor.getTensorContent().asReadOnlyByteBuffer();
+                val fb = bb.asFloatBuffer();
+                val fa = new float[fb.capacity()];
+                for (int e = 0; e < fb.capacity(); e++)
+                    fa[e] = fb.get(e);
+
+                val array = Nd4j.create(fa, arrayShape, 'c', 0);
+                //log.info("SUM1: {}", array.sumNumber());
+                //log.info("Data: {}", Arrays.toString(array.data().asFloat()));
                 return array;
             }
         } else if (tfTensor.getDtype() == DataType.DT_DOUBLE) {
@@ -516,8 +521,20 @@ public class TensorFlowImport {
             } else if (tfTensor.getTensorContent().size() > 0) {
                 long length = ArrayUtil.prodLong(arrayShape);
                 // binary representation
-                DataBuffer buffer = Nd4j.createBuffer(tfTensor.getTensorContent().asReadOnlyByteBuffer(), DataBuffer.Type.FLOAT, (int) length);
-                INDArray array = Nd4j.createArrayFromShapeBuffer(buffer, Nd4j.getShapeInfoProvider().createShapeInformation(arrayShape, 'c'));
+                //DataBuffer buffer = Nd4j.createBuffer(tfTensor.getTensorContent().asReadOnlyByteBuffer(), DataBuffer.Type.FLOAT, (int) length);
+                //INDArray array = Nd4j.createArrayFromShapeBuffer(buffer, Nd4j.getShapeInfoProvider().createShapeInformation(arrayShape, 'c'));
+
+                // binary representation
+                val bb = tfTensor.getTensorContent().asReadOnlyByteBuffer();
+                val fb = bb.asFloatBuffer();
+                val da = new double[fb.capacity()];
+                for (int e = 0; e < fb.capacity(); e++)
+                    da[e] = fb.get(e);
+
+                val array = Nd4j.create(da, arrayShape, 0, 'c');
+                //log.info("SUM1: {}", array.sumNumber());
+                //log.info("Data: {}", Arrays.toString(array.data().asFloat()));
+
                 return array;
             }
         } else if (tfTensor.getDtype() == DataType.DT_INT64) {
@@ -647,6 +664,32 @@ public class TensorFlowImport {
 
              // new shape goes here
              opState.setExtraBits(variable.getShape());
+         } else if (lc.equalsIgnoreCase("concat")) {
+             log.info("TNode inputs: {}", tNode.getInputs());
+             TIndex dimIndex;
+             int idx = -1;
+             int cnt = 0;
+             int concatDimension = 0;
+             for (val index:tNode.getInputs()) {
+                 log.info("Trying to find node: [{}]", index);
+                 val variable = variableSpace.getVariable(index);
+
+                 // concat dimension is only possible
+                 if (variable != null && variable.getId() < 0 && variable.getArray() == null) {
+                     idx = cnt;
+                     concatDimension = variable.getShape()[0];
+                 }
+                 cnt++;
+             }
+
+             if (idx < 0)
+                 throw new ND4JIllegalStateException("Can't find dimension for concatenatiion");
+
+             // deleting index of concat dimension
+             tNode.getInputs().remove(idx);
+
+             opState.setExtraBits(new int[]{concatDimension});
+             log.info("Concat dimension: {}", concatDimension);
          }
 
          if (!Nd4j.getExecutioner().getCustomOperations().containsKey(lc))

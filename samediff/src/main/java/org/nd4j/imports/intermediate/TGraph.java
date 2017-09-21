@@ -4,6 +4,7 @@ import com.google.common.primitives.Ints;
 import com.google.flatbuffers.FlatBufferBuilder;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.nd4j.autodiff.execution.NativeGraphExecutioner;
 import org.nd4j.autodiff.execution.conf.ExecutionMode;
@@ -28,6 +29,7 @@ import java.util.Map;
  *
  * @author raver119@gmail.com
  */
+@Slf4j
 public class TGraph {
     @Getter protected TVariableSpace variableSpace = new TVariableSpace();
 
@@ -68,7 +70,7 @@ public class TGraph {
         if (variableSpace.hasUndefinedPlaceholders())
             throw new ND4JIllegalStateException("You should provide placeholder values before launching graph");
 
-        FlatBufferBuilder bufferBuilder = new FlatBufferBuilder(0);
+        FlatBufferBuilder bufferBuilder = new FlatBufferBuilder(1024);
 
         val flatVariables = new ArrayList<Integer>();
         val flatOffsets = new ArrayList<Integer>();
@@ -76,14 +78,19 @@ public class TGraph {
 
         // first of all we build VariableSpace dump
         for (val variable: variableSpace.getAllVariables()) {
+            log.info("Exporting variable: [{}]", variable.getName());
 
-            INDArray arr = variable.getArray();
+            val arr = variable.getArray();
+            if (arr == null)
+                continue;
+
             int name = bufferBuilder.createString(variable.getName());
             int values = FlatVariable.createValuesVector(bufferBuilder, arr.data().asFloat());
             int shape = FlatVariable.createShapeVector(bufferBuilder, arr.shapeInfoDataBuffer().asInt());
 
             int flatVariable = FlatVariable.createFlatVariable(bufferBuilder, variable.getId(), name, shape, values, -1);
             flatVariables.add(flatVariable);
+
         }
 
 
@@ -99,6 +106,8 @@ public class TGraph {
 
         // and now we're dumping unmapped nodes, just in case of...
         for (val node: unmapped) {
+            log.info("Exporting node: [{}]", node.opName);
+
             float[] extras = node.getOpState().getExtraArgs() != null ? new float[node.getOpState().getExtraArgs().length] : new float[0];
             for (int e = 0; e < extras.length; e++) {
                 extras[e] = ((Number) node.getOpState().getExtraArgs()[e]).floatValue();
@@ -116,7 +125,7 @@ public class TGraph {
             int nodesInPaired = FlatNode.createInputPairedVector(bufferBuilder, inPaired);
             int nodesOut = FlatNode.createOutputVector(bufferBuilder, Ints.toArray(node.getOutputs()));
             int extraz = FlatNode.createExtraParamsVector(bufferBuilder, extras);
-            int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpState().getOpType() == OpState.OpType.CUSTOM ? node.getOpState().getExtraBits() : new int[]{});
+            int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpState().getOpType() == OpState.OpType.CUSTOM && node.getOpState().getExtraBits() != null ? node.getOpState().getExtraBits() : new int[]{});
             int dimensions = FlatNode.createDimensionsVector(bufferBuilder, node.getOpState().getAxes() != null ? node.getOpState().getAxes() : new int[]{});
             int fname = bufferBuilder.createString(node.getName());
 

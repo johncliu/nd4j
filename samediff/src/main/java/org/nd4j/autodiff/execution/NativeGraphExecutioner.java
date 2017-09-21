@@ -478,8 +478,11 @@ public class NativeGraphExecutioner implements GraphExecutioner {
     }
     */
 
-    public static short getOpNum(String name, OpState.OpType type) {
-        return (short) Nd4j.getOpFactory().getOpNumByName(name);
+    public static long getOpNum(String name, OpState.OpType type) {
+        if (type == OpState.OpType.CUSTOM)
+            return Nd4j.getExecutioner().getCustomOperations().get(name.toLowerCase()).getHash();
+        else
+            return (long) Nd4j.getOpFactory().getOpNumByName(name);
     }
 
     public static byte getFlatOpType(OpState.OpType type) {
@@ -494,8 +497,10 @@ public class NativeGraphExecutioner implements GraphExecutioner {
                 return OpType.ACCUMULATION;
             case INDEX_ACCUMULATION:
                 return OpType.INDEX_ACCUMULATION;
+            case CUSTOM:
+                return OpType.CUSTOM;
             default:
-                throw new UnsupportedOperationException();
+                throw new UnsupportedOperationException("Unknown op type passed in: " + type);
         }
     }
 

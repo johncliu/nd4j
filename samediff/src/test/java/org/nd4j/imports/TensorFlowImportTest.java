@@ -17,6 +17,8 @@ import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.io.ClassPathResource;
 import org.nd4j.linalg.util.HashUtil;
 
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.List;
 
@@ -132,5 +134,20 @@ public class TensorFlowImportTest {
 
         assertTrue(tg.getVariableSpace().hasVariable("input"));
         assertTrue(tg.getVariableSpace().getVariable("input").isPlaceholder());
+
+        tg.provideArrayForVariable("input", Nd4j.create(1, 3, 224, 224).assign(1.0));
+
+        val buffer = tg.asFlatBuffers();
+        assertNotNull(buffer);
+
+        val offset = buffer.position();
+
+        log.info("Length: {}; Offset: {};", buffer.capacity(), offset);
+        val array = buffer.array();
+
+        try (val fos = new FileOutputStream("../../libnd4j/tests/resources/inception.fb"); val dos = new DataOutputStream(fos)) {
+            dos.write(array, offset, array.length - offset);
+        }
+
     }
 }
