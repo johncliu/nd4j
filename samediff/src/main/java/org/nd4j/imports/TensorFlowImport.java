@@ -592,11 +592,14 @@ public class TensorFlowImport {
 
              val paddingMode = aPadding.getS().toStringUtf8();
 
-             // FIXME: we need to get kY, kX from weights shape
-             val kY = -1;
-             val kX = -1;
+             // we know that second input to conv2d is weights array
+             val weightsIndex = tNode.getInputs().get(1);
+             val variable = variableSpace.getVariable(weightsIndex);
 
-            log.info("Conv2D: k: [{}, {}]; s: [{}, {}]; padding: {}", -1, -1, sY, sX,  paddingMode);
+             val kY = variable.getArray().size(0);
+             val kX = variable.getArray().size(1);
+
+            log.info("Conv2D: k: [{}, {}]; s: [{}, {}]; padding: {}", kY, kX, sY, sX,  paddingMode);
 
              opState.setExtraBits(new int[] {kY, kX, sY.intValue(), sX.intValue(), 1, 1});
          } else if (lc.equalsIgnoreCase("avgpool") || lc.equalsIgnoreCase("maxpool")) {
