@@ -321,7 +321,7 @@ public class TensorFlowImport {
                 //NDArrayVertex vertex = new NDArrayVertex(diff,++nodesCnt, 0,varInformation);
                 //graph.addVertex(vertex);
 
-//                OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount());
+                OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount());
 //                opState.setResult(varInformation);
 
                 reverseVertexMap.put(tfNode.getName(), nodesCnt);
@@ -521,6 +521,64 @@ public class TensorFlowImport {
                 .opNum(-1)
                 .opName(tfNode.getOp())
                 .build();
+
+         if (lc.equalsIgnoreCase("conv2d")) {
+
+
+             val aStrides = tfNode.getAttrOrThrow("strides");
+             val tfStrides = aStrides.getList().getIList();
+             val sY = tfStrides.get(1);
+             val sX = tfStrides.get(2);
+
+             val aPadding = tfNode.getAttrOrDefault("padding", null);
+
+             val paddingMode = aPadding.getS().toStringUtf8();
+
+             // FIXME: we need to get kY, kX from weights shape
+             val kY = -1;
+             val kX = -1;
+
+            log.info("Conv2D: k: [{}, {}]; s: [{}, {}]; padding: {}", -1, -1, sY, sX,  paddingMode);
+
+             opState.setExtraBits(new int[] {kY, kX, sY.intValue(), sX.intValue(), 1, 1});
+         } else if (lc.equalsIgnoreCase("avgpool") || lc.equalsIgnoreCase("maxpool")) {
+             val aStrides = tfNode.getAttrOrThrow("strides");
+             val tfStrides = aStrides.getList().getIList();
+             val sY = tfStrides.get(1);
+             val sX = tfStrides.get(2);
+
+             val aKernels = tfNode.getAttrOrThrow("ksize");
+             val tfKernels = aKernels.getList().getIList();
+
+             val kY = tfKernels.get(1);
+             val kX = tfKernels.get(2);
+
+             val aPadding = tfNode.getAttrOrDefault("padding", null);
+
+             val paddingMode = aPadding.getS().toStringUtf8();
+
+             log.info("Pooling: k: [{},{}]; s: [{}, {}], padding: {}", kY, kX, sY, sX, aPadding);
+
+             opState.setExtraBits(new int[] {kY.intValue(), kX.intValue(), sY.intValue(), sX.intValue(), 1, 1});
+
+         } else if (lc.equalsIgnoreCase("lrn")) {
+             val aAlpha = tfNode.getAttrOrThrow("alpha");
+             val aBeta = tfNode.getAttrOrThrow("beta");
+             val aBias = tfNode.getAttrOrThrow("bias");
+             val aDepth = tfNode.getAttrOrThrow("depth_radius");
+
+             val alpha = aAlpha.getF();
+             val beta = aBeta.getF();
+             val bias = aBias.getF();
+             val depth = aDepth.getF();
+
+
+             opState.setExtraArgs(new Object[]{alpha, beta, bias, depth});
+             log.info("LRN: alpha: {}; beta: {}; bias: {}; depth: {};", alpha, beta, bias, depth);
+         }
+
+         if (!Nd4j.getExecutioner().getCustomOperations().containsKey(lc))
+             throw new ND4JIllegalStateException("Unknown operation requested: ["+ tfNode.getOp() +"]");
 
         return opState;
     }

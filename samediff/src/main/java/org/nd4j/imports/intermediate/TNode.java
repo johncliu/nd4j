@@ -1,6 +1,7 @@
 package org.nd4j.imports.intermediate;
 
 import lombok.*;
+import org.nd4j.autodiff.opstate.OpState;
 import org.nd4j.graph.OpClass;
 import org.nd4j.linalg.primitives.ImmutablePair;
 import org.tensorflow.framework.NodeDef;
@@ -37,6 +38,9 @@ public class TNode {
 
     // op group basically
     OpClass opClass;
+
+    // parameters for op
+    OpState opState;
 
     public TNode(int id) {
         this.id = id;

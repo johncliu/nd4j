@@ -134,8 +134,6 @@ public class OpState implements Serializable {
         this.extraArgs = extraArgs;
     }
 
-
-
     public  enum OpType {
         SCALAR_TRANSFORM,
         ACCUMULATION,
