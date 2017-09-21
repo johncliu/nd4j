@@ -14,6 +14,7 @@ import org.nd4j.autodiff.opstate.OpState;
 import org.nd4j.graph.FlatGraph;
 import org.nd4j.graph.FlatNode;
 import org.nd4j.graph.FlatVariable;
+import org.nd4j.graph.IntPair;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.api.ops.executioner.OpExecutioner;
 import org.nd4j.linalg.exception.ND4JIllegalStateException;
@@ -113,16 +114,13 @@ public class TGraph {
                 extras[e] = ((Number) node.getOpState().getExtraArgs()[e]).floatValue();
             }
 
-            val inPaired = new int[node.getInputs().size() * 2];
+            val inPaired = new ArrayList<Integer>();
             int e = 0;
-            for (val index: node.getInputs()) {
-                inPaired[e] = index.getNode();
-                inPaired[e+1] = index.getIndex();
-                e += 2;
-            }
+            for (val index: node.getInputs())
+                inPaired.add(IntPair.createIntPair(bufferBuilder, index.getNode(), index.getIndex()));
 
             int nodesIn = FlatNode.createInputVector(bufferBuilder, new int[]{});
-            int nodesInPaired = FlatNode.createInputPairedVector(bufferBuilder, inPaired);
+            int nodesInPaired = FlatNode.createInputPairedVector(bufferBuilder, Ints.toArray(inPaired));
             int nodesOut = FlatNode.createOutputVector(bufferBuilder, Ints.toArray(node.getOutputs()));
             int extraz = FlatNode.createExtraParamsVector(bufferBuilder, extras);
             int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpState().getOpType() == OpState.OpType.CUSTOM && node.getOpState().getExtraBits() != null ? node.getOpState().getExtraBits() : new int[]{});
