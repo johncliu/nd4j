@@ -37,6 +37,8 @@ public class TGraph {
     // this is the layered representation
     protected Map<Integer, List<TNode>> onionMap = new HashMap<>();
 
+    protected Map<Integer, TNode> outputMap = new HashMap<>();
+
     // here we're storing unmapped nodes
     protected List<TNode> unmapped = new ArrayList<>();
 
@@ -44,8 +46,13 @@ public class TGraph {
         onionMap.put(layer, new ArrayList<>());
     }
 
+    public TNode getNode(@NonNull Integer index) {
+        return outputMap.get(index);
+    }
+
     public void addNode(@NonNull TNode node) {
         unmapped.add(node);
+        outputMap.put(node.getId(), node);
     }
 
     protected int getTailSize() {
@@ -107,7 +114,7 @@ public class TGraph {
 
         // and now we're dumping unmapped nodes, just in case of...
         for (val node: unmapped) {
-            log.info("Exporting node: [{}]", node.opName);
+            log.info("Exporting node: [{}]", node.getOpName());
 
             float[] extras = node.getOpState().getExtraArgs() != null ? new float[node.getOpState().getExtraArgs().length] : new float[0];
             for (int e = 0; e < extras.length; e++) {

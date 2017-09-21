@@ -19,28 +19,28 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TNode {
-    @Builder.Default protected List<TIndex> inputs = new ArrayList<>();
+    @Builder.Default private List<TIndex> inputs = new ArrayList<>();
 
     // we can use the same TIndex here, but we don't really need it. Only input nodes should care about indices
-    @Builder.Default protected List<Integer> outputs = new ArrayList<>();
+    @Builder.Default private List<Integer> outputs = new ArrayList<>();
 
     // may be set externally, i.e. in TF graph
-    String name;
+    private String name;
 
     // exists only after mapping
-    int id;
+    private int id;
 
     // opName in libnd4j op space
-    String opName;
+    private String opName;
 
     // opNum is applicable only to legacy XYZ ops
-    int opNum;
+    private int opNum;
 
     // op group basically
-    OpClass opClass;
+    private OpClass opClass;
 
     // parameters for op
-    OpState opState;
+    private OpState opState;
 
     public TNode(int id) {
         this.id = id;

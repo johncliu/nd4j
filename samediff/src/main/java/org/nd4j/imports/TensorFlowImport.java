@@ -378,6 +378,14 @@ public class TensorFlowImport {
                 OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount(), tNode, intermediateGraph.getVariableSpace());
                 tNode.setOpState(opState);
 
+                for (val index: tNode.getInputs()) {
+                    if (index.getNode() < 0)
+                        continue;
+
+                    val node = intermediateGraph.getNode(index.getNode());
+                    node.getOutputs().add(tNode.getId());
+                }
+
                 log.info("Node: {}", tNode);
                 intermediateGraph.addNode(tNode);
             }
