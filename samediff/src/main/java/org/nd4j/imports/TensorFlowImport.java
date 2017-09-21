@@ -15,6 +15,7 @@ import org.nd4j.autodiff.samediff.impl.SDVariable;
 import org.nd4j.imports.intermediate.TGraph;
 import org.nd4j.imports.intermediate.TNode;
 import org.nd4j.imports.intermediate.TVariable;
+import org.nd4j.imports.intermediate.TVariableSpace;
 import org.nd4j.linalg.api.buffer.DataBuffer;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.api.shape.Shape;
@@ -24,6 +25,7 @@ import org.nd4j.linalg.util.ArrayUtil;
 import org.tensorflow.framework.*;
 
 import java.io.*;
+import java.nio.IntBuffer;
 import java.util.*;
 
 /**
@@ -298,17 +300,26 @@ public class TensorFlowImport {
 
                     TensorProto tensor = value.getTensor();
                     log.info("Dtype: {}", tensor.getDtype());
+                    if (tensor.getDtype() == DataType.DT_FLOAT || tensor.getDtype() == DataType.DT_DOUBLE) {
 
-                    INDArray array = getNDArrayFromTensor(tensor);
-                    variable.setShape(array.shape());
-                    variable.setArray(array);
+                        INDArray array = getNDArrayFromTensor(tensor);
+                        variable.setShape(array.shape());
+                        variable.setArray(array);
+                    } else {
+                        val shape = getShapeFromTensor(tensor);
+
+                        assert shape != null;
+                        assert shape.length > 0;
+
+                        variable.setShape(shape);
+                    }
                 }
 
                 //diff.addVariable(variable);
                 //graph.addVertex(vertex);
 
                 if (!variable.isPlaceholder())
-                    log.info("Variable shape: {}", Arrays.toString(variable.getArray().shape()));
+                    log.info("Variable: id: {}; name: {}; shape: {}", variable.getId(), variable.getName(), Arrays.toString(variable.getShape()));
                 else
                     log.info("Placeholder shape: {}", Arrays.toString(variable.getShape()));
 
@@ -321,7 +332,7 @@ public class TensorFlowImport {
                 //NDArrayVertex vertex = new NDArrayVertex(diff,++nodesCnt, 0,varInformation);
                 //graph.addVertex(vertex);
 
-                OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount());
+
 //                opState.setResult(varInformation);
 
                 reverseVertexMap.put(tfNode.getName(), nodesCnt);
@@ -330,6 +341,7 @@ public class TensorFlowImport {
                         .id(nodesCnt)
                         .opName(tfNode.getOp())
                         .build();
+
 
                 for (int e = 0; e < tfNode.getInputCount(); e++) {
                     String input = tfNode.getInput(e);
@@ -365,6 +377,9 @@ public class TensorFlowImport {
                     //graph.addEdge(id, nodesCnt, opState, true);
                 }
 
+                OpState opState = getOpStateFromNodeDef(tfNode, tfNode.getInputCount(), tNode, intermediateGraph.getVariableSpace());
+                tNode.setOpState(opState);
+
                 log.info("Node: {}", tNode);
                 intermediateGraph.addNode(tNode);
             }
@@ -375,6 +390,40 @@ public class TensorFlowImport {
         return intermediateGraph;
     }
 
+    protected static int[]  getShapeFromTensor(TensorProto tfTensor) {
+        int[] arrayShape = null;
+
+        if (tfTensor.getIntValCount() == 1) {
+            int val = tfTensor.getIntVal(0);
+
+            if (arrayShape == null || arrayShape.length == 0)
+                arrayShape = new int[]{1, 1};
+        } else if (tfTensor.getInt64ValCount() > 0) {
+            arrayShape = new int[tfTensor.getInt64ValCount()];
+            for (int e = 0; e < tfTensor.getInt64ValCount(); e++)
+                arrayShape[e] = (int) tfTensor.getInt64Val(e);
+
+        } else {
+            // FIXME: INT bytebuffers should be converted to floating point
+            if (tfTensor.getDtype() == DataType.DT_INT32) {
+                val buffer = tfTensor.getTensorContent().asReadOnlyByteBuffer().asIntBuffer();
+
+                arrayShape = new int[buffer.capacity()];
+                for (int e = 0; e < buffer.capacity(); e++)
+                    arrayShape[e] = (int) buffer.get(e);
+            } else if (tfTensor.getDtype() ==DataType.DT_INT64) {
+                val buffer = tfTensor.getTensorContent().asReadOnlyByteBuffer().asLongBuffer();
+
+                arrayShape = new int[buffer.capacity()];
+                for (int e = 0; e < buffer.capacity(); e++)
+                    arrayShape[e] = (int) buffer.get(e);
+            }
+
+            log.info("Array shape: {}", Arrays.toString(arrayShape));
+        }
+
+        return arrayShape;
+    }
 
     protected static INDArray getNDArrayFromTensor(TensorProto tfTensor) {
         int[] arrayShape = null;
@@ -417,8 +466,8 @@ public class TensorFlowImport {
                 return array;
             } else {
                 // FIXME: INT bytebuffers should be converted to floating point
-//                throw new UnsupportedOperationException("To be implemented yet");
-                return Nd4j.create(5,5);
+                throw new UnsupportedOperationException("To be implemented yet");
+//                return Nd4j.create(5,5);
             }
         } else if (tfTensor.getDtype() == DataType.DT_FLOAT) {
             if (tfTensor.getFloatValCount() == 1) {
@@ -501,18 +550,27 @@ public class TensorFlowImport {
     }
 
     protected static OpState getOpStateFromNodeDef(NodeDef tfNode, int numInputs) {
+        return getOpStateFromNodeDef(tfNode, numInputs, null, null);
+    }
+
+    protected static OpState getOpStateFromNodeDef(NodeDef tfNode, int numInputs, TNode tNode, TVariableSpace variableSpace) {
         String lc = tfNode.getOp().toLowerCase();
         log.info("Looking for [{}] op...", lc);
         if (numInputs > 0 && numInputs <= 2) {
             int opNum = Nd4j.getOpFactory().getOpNumIfExists(lc);
-            if (opNum >= 0) {
-                OpState opState = OpState.builder()
-                        .opType(OpState.opTypeFromOp(Nd4j.getOpFactory().getOpByName(lc)))
-                        .opNum(opNum)
-                        .opName(lc)
-                        .build();
 
-                return opState;
+            if (opNum >= 0) {
+                val type = OpState.opTypeFromOp(Nd4j.getOpFactory().getOpByName(lc));
+
+                if (type != OpState.OpType.SHAPE) {
+                    OpState opState = OpState.builder()
+                            .opType(OpState.opTypeFromOp(Nd4j.getOpFactory().getOpByName(lc)))
+                            .opNum(opNum)
+                            .opName(lc)
+                            .build();
+
+                    return opState;
+                }
             }
         }
 
@@ -575,6 +633,17 @@ public class TensorFlowImport {
 
              opState.setExtraArgs(new Object[]{alpha, beta, bias, depth});
              log.info("LRN: alpha: {}; beta: {}; bias: {}; depth: {};", alpha, beta, bias, depth);
+         } else if (lc.equalsIgnoreCase("reshape")) {
+             // in reshape operation we replace second input, and replace it with extra args
+             log.info("TNode inputs: {}", tNode.getInputs());
+             val shapeIndex = tNode.getInputs().remove(1);
+             val variable = variableSpace.getVariable(shapeIndex);
+
+             assert variable != null;
+             assert variable.getShape() != null;
+
+             // new shape goes here
+             opState.setExtraBits(variable.getShape());
          }
 
          if (!Nd4j.getExecutioner().getCustomOperations().containsKey(lc))
