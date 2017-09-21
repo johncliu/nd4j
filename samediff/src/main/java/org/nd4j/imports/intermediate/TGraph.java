@@ -1,10 +1,20 @@
 package org.nd4j.imports.intermediate;
 
+import com.google.common.primitives.Ints;
 import com.google.flatbuffers.FlatBufferBuilder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.val;
+import org.nd4j.autodiff.execution.NativeGraphExecutioner;
+import org.nd4j.autodiff.execution.conf.ExecutionMode;
+import org.nd4j.autodiff.execution.conf.ExecutorConfiguration;
+import org.nd4j.autodiff.execution.conf.OutputMode;
+import org.nd4j.autodiff.opstate.OpState;
+import org.nd4j.graph.FlatGraph;
+import org.nd4j.graph.FlatNode;
+import org.nd4j.graph.FlatVariable;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.ops.executioner.OpExecutioner;
 import org.nd4j.linalg.exception.ND4JIllegalStateException;
 
 import java.nio.ByteBuffer;
@@ -60,7 +70,21 @@ public class TGraph {
 
         FlatBufferBuilder bufferBuilder = new FlatBufferBuilder(0);
 
+        val flatVariables = new ArrayList<Integer>();
+        val flatOffsets = new ArrayList<Integer>();
+        val flatNodes = new ArrayList<Integer>();
+
         // first of all we build VariableSpace dump
+        for (val variable: variableSpace.getAllVariables()) {
+
+            INDArray arr = variable.getArray();
+            int name = bufferBuilder.createString(variable.getName());
+            int values = FlatVariable.createValuesVector(bufferBuilder, arr.data().asFloat());
+            int shape = FlatVariable.createShapeVector(bufferBuilder, arr.shapeInfoDataBuffer().asInt());
+
+            int flatVariable = FlatVariable.createFlatVariable(bufferBuilder, variable.getId(), name, shape, values, -1);
+            flatVariables.add(flatVariable);
+        }
 
 
         // then we build onion dump. we don't need it, but why not?
@@ -72,6 +96,61 @@ public class TGraph {
                 // dump right here
             }
         }
+
+        // and now we're dumping unmapped nodes, just in case of...
+        for (val node: unmapped) {
+            float[] extras = node.getOpState().getExtraArgs() != null ? new float[node.getOpState().getExtraArgs().length] : new float[0];
+            for (int e = 0; e < extras.length; e++) {
+                extras[e] = ((Number) node.getOpState().getExtraArgs()[e]).floatValue();
+            }
+
+            val inPaired = new int[node.getInputs().size() * 2];
+            int e = 0;
+            for (val index: node.getInputs()) {
+                inPaired[e] = index.getNode();
+                inPaired[e+1] = index.getIndex();
+                e += 2;
+            }
+
+            int nodesIn = FlatNode.createInputVector(bufferBuilder, new int[]{});
+            int nodesInPaired = FlatNode.createInputPairedVector(bufferBuilder, inPaired);
+            int nodesOut = FlatNode.createOutputVector(bufferBuilder, Ints.toArray(node.getOutputs()));
+            int extraz = FlatNode.createExtraParamsVector(bufferBuilder, extras);
+            int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpState().getOpType() == OpState.OpType.CUSTOM ? node.getOpState().getExtraBits() : new int[]{});
+            int dimensions = FlatNode.createDimensionsVector(bufferBuilder, node.getOpState().getAxes() != null ? node.getOpState().getAxes() : new int[]{});
+            int fname = bufferBuilder.createString(node.getName());
+
+            int flatNode = FlatNode.createFlatNode(bufferBuilder,
+                    node.getId(),
+                    fname,
+                    NativeGraphExecutioner.getFlatOpType(node.getOpState().getOpType()),
+                    NativeGraphExecutioner.getOpNum(node.getOpState().getOpName(), node.getOpState().getOpType()),
+                    nodesIn,
+                    nodesInPaired,
+                    (byte) 0,
+                    nodesOut,
+                    extraz,
+                    integerArgs,
+                    dimensions,
+                    -1,
+                    node.getOpState().getOpType() == OpState.OpType.SCALAR_TRANSFORM ? node.getOpState().getScalarValue().floatValue() : 0.0f);
+
+            flatNodes.add(flatNode);
+        }
+
+        int outputsOffset = FlatGraph.createVariablesVector(bufferBuilder, Ints.toArray(flatOffsets));
+        int variablesOffset = FlatGraph.createVariablesVector(bufferBuilder, Ints.toArray(flatVariables));
+        int nodesOffset = FlatGraph.createNodesVector(bufferBuilder, Ints.toArray(flatNodes));
+
+        val configuration = ExecutorConfiguration.builder()
+                .outputMode(OutputMode.IMPLICIT)
+                .executionMode(ExecutionMode.SEQUENTIAL)
+                .profilingMode(OpExecutioner.ProfilingMode.DISABLED)
+                .gatherTimings(true)
+                .build();
+
+        int fg = FlatGraph.createFlatGraph(bufferBuilder, 119, variablesOffset, nodesOffset, outputsOffset, configuration.getFlatConfiguration(bufferBuilder));
+        bufferBuilder.finish(fg);
 
         return bufferBuilder.dataBuffer();
     }

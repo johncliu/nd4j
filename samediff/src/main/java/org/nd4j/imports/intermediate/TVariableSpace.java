@@ -5,10 +5,7 @@ import lombok.val;
 import org.nd4j.linalg.primitives.ImmutablePair;
 import org.nd4j.linalg.primitives.Pair;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * This class is intermediate representation of VariableSpace for Graph
@@ -22,6 +19,11 @@ public class TVariableSpace {
     private List<TVariable> externals = new ArrayList<>();
     private List<TVariable> placeholders = new ArrayList<>();
 
+    public Collection<TVariable> getAllVariables() {
+        val list = new ArrayList<TVariable>(numericMap.values());
+
+        return list;
+    }
 
     public void addVariable(int id, @NonNull TVariable variable) {
         val key = TIndex.makeOf(id, 0);

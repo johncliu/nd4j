@@ -162,6 +162,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
             }
 
             int nodesIn = FlatNode.createInputVector(bufferBuilder, Ints.toArray(node.getInput()));
+            int nodesInP = FlatNode.createInputPairedVector(bufferBuilder, new int[]{});
             int nodesOut = FlatNode.createOutputVector(bufferBuilder, Ints.toArray(node.getOutput()));
             int extraz = FlatNode.createExtraParamsVector(bufferBuilder, extras);
             int integerArgs = FlatNode.createExtraIntegerVector(bufferBuilder, node.getOpExecAction().getOpState().getOpType() == OpState.OpType.CUSTOM ? node.getOpExecAction().getOpState().getExtraBits() : new int[]{});
@@ -174,6 +175,7 @@ public class NativeGraphExecutioner implements GraphExecutioner {
                     getFlatOpType(node.getOpExecAction().getOpState().getOpType()),
                     getOpNum(node.getOpExecAction().getOpState().getOpName(), node.getOpExecAction().getOpState().getOpType()),
                     nodesIn,
+                    nodesInP,
                     (byte) 0,
                     nodesOut,
                     extraz,
@@ -476,11 +478,11 @@ public class NativeGraphExecutioner implements GraphExecutioner {
     }
     */
 
-    protected short getOpNum(String name, OpState.OpType type) {
+    public static short getOpNum(String name, OpState.OpType type) {
         return (short) Nd4j.getOpFactory().getOpNumByName(name);
     }
 
-    protected byte getFlatOpType(OpState.OpType type) {
+    public static byte getFlatOpType(OpState.OpType type) {
         switch (type) {
             case SCALAR_TRANSFORM:
                 return OpType.SCALAR;
